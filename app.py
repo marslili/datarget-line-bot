@@ -14,9 +14,12 @@ from linebot.exceptions import (
 from linebot.models import *
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
+
 config = configparser.ConfigParser()
 config.read("config.ini")
+
+
+
 line_bot_api = LineBotApi(config['line_bot']['Channel_Access_Token'])
 handler = WebhookHandler(config['line_bot']['Channel_Secret'])
 
@@ -44,21 +47,6 @@ def callback():
 
 
 
-
-
-def apple_news():
-    target_url = 'https://tw.appledaily.com/new/realtime'
-    print('Start parsing appleNews....')
-    rs = requests.session()
-    res = rs.get(target_url, verify=False)
-    soup = BeautifulSoup(res.text, 'html.parser')
-    content = ""
-    for index, data in enumerate(soup.select('.rtddt a'), 0):
-        if index == 5:
-            return content
-        link = data['href']
-        content += '{}\n\n'.format(link)
-    return content
 
 
 
@@ -100,7 +88,34 @@ def ptt_gossiping():
     return content
 
 
+def get_page_number(content):
+    start_index = content.find('index')
+    end_index = content.find('.html')
+    page_number = content[start_index + 5: end_index]
+    return int(page_number) + 1
+    
+def crawl_page_gossiping(res):
+    soup = BeautifulSoup(res.text, 'html.parser')
+    article_gossiping_seq = []
+    for r_ent in soup.find_all(class_="r-ent"):
+        try:
+            # 先得到每篇文章的篇url
+            link = r_ent.find('a')['href']
 
+            if link:
+                # 確定得到url再去抓 標題 以及 推文數
+                title = r_ent.find(class_="title").text.strip()
+                url_link = 'https://www.ptt.cc' + link
+                article_gossiping_seq.append({
+                    'url_link': url_link,
+                    'title': title
+                })
+
+        except Exception as e:
+            # print u'crawPage function error:',r_ent.find(class_="title").text.strip()
+            # print('本文已被刪除')
+            print('delete', e)
+    return article_gossiping_seq
 
 def technews():
     target_url = 'http://technews.tw/'
@@ -127,14 +142,14 @@ def handle_message(event):
     print("event.reply_token:", event.reply_token)
     print("event.message.text:", event.message.text)
     print(event.message.text.find("stock"))
-    if event.message.text.lower() == "eyny":
-        content = eyny_movie()
+    if "hello" in event.message.text:
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=content))
+            TextSendMessage(text="你好"))
         return 0
-    if event.message.text == "蘋果即時新聞":
-        content = apple_news()
+
+    if event.message.text == "ptt":
+        content = ptt_gossiping()
         line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(text=content))
@@ -146,7 +161,6 @@ def handle_message(event):
             TextSendMessage(text=content))
         return 0
     if "stock" in event.message.text:
-    
         print("stock~~="+event.message.text)
         content = technews()
         line_bot_api.reply_message(
@@ -163,8 +177,8 @@ def handle_message(event):
                 thumbnail_image_url='https://i.imgur.com/xQF5dZT.jpg',
                 actions=[
                     MessageTemplateAction(
-                        label='新聞',
-                        text='新聞'
+                        label='科技',
+                        text='tech'
                     ),
                     MessageTemplateAction(
                         label='電影',
